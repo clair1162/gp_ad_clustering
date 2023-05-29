@@ -75,8 +75,13 @@ class Clustering(object):
             tol : update tolerance. centroids 업데이트가 이 값보다 작으면 멈춤
         '''
         self.k = -1
+        self.thrsh = -1
         self.max_iter = max_iter
         self.tol = tol
+        self.thrsh = [] #  100*n
+        self.distances = []
+        
+
 
     def optimal_k(self, input):
         '''
@@ -123,22 +128,37 @@ class Clustering(object):
     def fit(self, X):
         '''
         arguments :
-            X : array input
+            X : input array
         returns :
-            cluster assignment of each vector, centroids of cluster
-            각 벡터가 어느 클러스터에 속하는지 
-            클러스터 중심
+            각 벡터가 어느 클러스터에 속하는지 리스트형태로 반환 [0,1,2,2,2,1,1,0,0 ...]
+            클러스터 중심 (x,y)쌍 리스트 [[x,y],[x,y]..]
         '''
         t1 = time()
 
+        self.distances = [] # 중심과의 거리
+
         self.k = self.optimal_k(X)
         print("opt_k : ", self.k)
+
+        
+        for i in range(self.k):
+            self.distances.append([]) # [[],[],[]]
+
         self.centroids = self.random_init(X)
         
         for iter in range(self.max_iter):
             print(f'{iter+1} iteration...')
+
+            # distances 비우기
+            for i in range(len(self.distances)):
+                 self.distances[i].clear()
+
+            # 군집 재할당시 
+            self.thrsh.clear()
             # 군집 재할당
             self._cluster_assign(X)
+            # centroid와의 거리의 최대값 추가
+            self.thrsh.append(self._max_distance(self.distances))
             # 군집 중심 계산
             self._centroids_update(X)
 
@@ -156,15 +176,20 @@ class Clustering(object):
         거리가 가장 짧은 군집 중심에 군집을 할당
         '''
         self.assignments=[]
-        for d in X:
+        
+        for data in X:
             min_dist = float('inf')
             min_index = -1
+            max_dist = -float('inf')
+            
             for i, centroid in enumerate(self.centroids):
-                dist = calc_dist(d, centroid)
+                dist = calc_dist(data, centroid)
                 if dist<min_dist:
                     min_dist = dist
                     min_index = i
+            self.distances[i].append(min_dist) # [소속 centroid][중심까지의 거리]
             self.assignments.append(min_index)
+
 
     def _centroids_update(self, X):
         '''
@@ -187,6 +212,19 @@ class Clustering(object):
             for index in data_indices:
                 cluster_data.append(X[index])
             self.centroids[i] = calc_vector_mean(cluster_data)
+    
+    def _max_distance(self, dist):
+        '''
+        # list : # [[],[],[]]
+        # [소속 centroid][중심까지의 거리]
+        return : [클러스터별 최대거리]
+        '''        
+        max_distances = []
+        for i in range(len(dist)):
+            max_distances.append(max(dist[i], default=0))
+        return max_distances
+
+        
 
 
 
@@ -225,21 +263,64 @@ def tsne_visualization(X):
     print("centroids : ", centroids)
     centroids = np.transpose(centroids)
     print(centroids)
+
     plt.scatter(x = centroids[0], y = centroids[1], color = 'black')
 
     '''
 
-def distance_from_centeroid(X, centroid):
-    '''
-    x, centroid - euclidean dist 
-    '''
-    # assert len(A) == len(B)
 
-    sum = 0
-    for a,b in zip(X,centroid):
-        sum += (a-b)**2
+
+
+
+
+def anomaly_detection(X, thrsh):
+    #anomaly array
+    anomaly_array = []
     
-    return math.sqrt(sum)
+    #threshold = int(0.01 * len(data))
+    threshold = thrsh
+
+    #create array of final dataframe ...? 이건 머임
+    final_arr = final_df.values
+
+    #dictionary with cluster and count of number of points
+    cluster_len = {}
+
+    for s in range(len(final_arr)):
+        if final_arr[s][-1] in cluster_len:
+            cluster_len[final_arr[s][-1]] += 1
+        else:
+            cluster_len[final_arr[s][-1]] = 1
+
+    for clster,len_val in cluster_len.items():
+        #detect isolation points
+        if len_val == 1:
+            anomaly_array.append(final_dict[clster])
+        #detect clusters with points less than threshold
+        elif len_val < threshold:
+            for values in final_dict[clster]:
+                anomaly_array.append(values)
+
+    anamoly_dict = {}
+    for clu_key,clu_val in final_dict.items():
+        anamoly_dict[clu_key] = [(np.mean(clu_val,axis = 0) + 2*np.std(clu_val,axis = 0)).tolist(),(np.mean(clu_val,axis = 0) - 2*np.std(clu_val,axis = 0)).tolist()]
+        
+    z = 0
+    for key1 in set(anamoly_dict.keys()) & set(final_dict.keys()):
+        for value1 in final_dict[key1]:
+            #check if each point is within the mean ± 2*SD range
+            if ~(np.less(np.array(value1),np.array(anamoly_dict[key1][z])).any()) and np.greater(np.array(np.array(value1)),anamoly_dict[key1][z+1]).all():
+                anomaly_array.append(value1)
+            else:
+                continue
+
+    anomalies_array = [[np.round(float(i), 2) for i in nested] for nested in anomaly_array]
+    
+    if len(anomalies_array) == 0:
+        print("No anomalies")
+    else:
+        for anomaly in anomalies_array:
+            print(anomaly)
 
 
 
@@ -265,15 +346,10 @@ outliers = np.argwhere(np.abs(residuals) > threshold)
 
 임계값 > train set에서의 최대 거리
 
+
+
 '''
 
 
 # 이상 처리...>>AT 코드 다시 보기
-
-'''
-완료 목록
-# k means 코드 구현
-# 실루엣 스코어로 최적 군집수 return하는 함수 - elbow value 사용. 완. 
-# TSNE으로 시각화 하는 함수
-
-'''
+# Mahalanobis distance
