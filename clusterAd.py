@@ -17,6 +17,9 @@ from matplotlib import pyplot as plt
 # time
 from time import time
 
+import warnings
+warnings.filterwarnings('ignore')
+
 
 
 def calc_dist(A,B):
@@ -35,6 +38,7 @@ def calc_dist(A,B):
 def calc_vector_mean(array):
     '''
     array : 각 클러스터에 할당된 벡터의 리스트
+    각 차원별 평균
     '''
     summation = [0]*len(array[0])
     for row in array:
@@ -125,9 +129,10 @@ class Clustering(object):
             각 벡터가 어느 클러스터에 속하는지 
             클러스터 중심
         '''
-        t1 = time.time()
+        t1 = time()
 
         self.k = self.optimal_k(X)
+        print("opt_k : ", self.k)
         self.centroids = self.random_init(X)
         
         for iter in range(self.max_iter):
@@ -140,7 +145,7 @@ class Clustering(object):
             if calc_diff(self.prev_centroids, self.centroids)<self.tol:
                 break
 
-        t2 = time.time()
+        t2 = time()
         print("KMeans train time: {:.3f} sec".format(t2-t1))
 
         return self.assignments, self.centroids
@@ -204,11 +209,42 @@ def tsne_visualization(X):
 
     # numpy array -> DataFrame 변환
     tsne_df = pd.DataFrame(tsne_np, columns = ['component 0', 'component 1', 'component 2'])
+
+    ---
+
+    tsne = TSNE(n_components=2, perplexity = 44, random_state = 300) #44 || 32
+    result = tsne.fit_transform(x_std)
+    tsne_x = result[:,0] # 100
+    tsne_y = result[:,1] # 100
+
+    # sns.scatterplot(x=tsne_x, y=tsne_y, hue=clusters.labels_)
+    sns.scatterplot(x=tsne_x, y=tsne_y)
+
+
+    # centroid 시각화 코드
+    print("centroids : ", centroids)
+    centroids = np.transpose(centroids)
+    print(centroids)
+    plt.scatter(x = centroids[0], y = centroids[1], color = 'black')
+
     '''
+
+def distance_from_centeroid(X, centroid):
+    '''
+    x, centroid - euclidean dist 
+    '''
+    # assert len(A) == len(B)
+
+    sum = 0
+    for a,b in zip(X,centroid):
+        sum += (a-b)**2
+    
+    return math.sqrt(sum)
 
 
 
 '''
+case 1.
 # k means로 이상탐지하는 함수
 1. 클러스터링 후 centroid 받아옴. 군집을 하나로 취급.... 흠....>균일한 대역폭에서는 가능하겠지만... 
 2. 거리 = sqrt((x-center)**2) 모든 x와 유클리디안 거리를 구한다. 
@@ -218,6 +254,17 @@ def tsne_visualization(X):
     values = x[indexes] // 이상으로 파악된 값들 
     * 이때 x, 거리, 뭐뭐 전부 np.array() 이어야 x[index], argsort 사용가능.
 4. 이상 visualization - plt.scatter(indexes, values, color='r')
+
+case 2.
+# 잔차 계산
+residuals = data - tsne.inverse_transform(embedding_vector)
+
+# 이상값 탐지
+threshold = 3 # 임계값 설정
+outliers = np.argwhere(np.abs(residuals) > threshold)
+
+임계값 > train set에서의 최대 거리
+
 '''
 
 
